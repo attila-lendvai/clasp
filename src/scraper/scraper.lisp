@@ -65,7 +65,7 @@
   (let* ((*debug-io* (make-two-way-stream *standard-input* *standard-output*))
          (clang-output (run-clang clang-command sif-pathname))
          (tags (process-all-recognition-elements clang-output)))
-    (with-open-file (fout sif-pathname :direction :output :if-exists :supersede)
+    (with-open-file (fout sif-pathname :direction :output :if-exists :supersede :external-format :utf-8)
       (let ((*print-readably* t)
             (*print-pretty* nil))
         (prin1 tags fout)))))

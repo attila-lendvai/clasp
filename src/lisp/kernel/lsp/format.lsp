@@ -24,7 +24,6 @@
 (defmacro fmt-log (&rest args) nil)
 
 (pushnew :cdr-7 *features*)
-(pushnew :formatter *features*)
 
 ;;;; Float printing.
 
@@ -296,7 +295,6 @@
 
 (defconstant +format-directive-limit+ (1+ (char-code #\~)))
 
-#+formatter
 (defparameter *format-directive-expanders*
   (make-array +format-directive-limit+ :initial-element nil))
 (defparameter *format-directive-interpreters*
@@ -436,7 +434,6 @@
 ;;; Used by the expander stuff.  This is bindable so that ~<...~:>
 ;;; can change it.
 ;;;
-#+formatter
 (defparameter *expander-next-arg-macro* 'expander-next-arg)
 
 ;;; *ONLY-SIMPLE-ARGS* -- internal.
@@ -555,8 +552,6 @@
 
 ;;;; FORMATTER
 
-#+formatter
-(progn
 (defmacro formatter (control-string)
   `#',(%formatter control-string))
 
@@ -638,10 +633,6 @@
 	      *simple-args*)
 	symbol)))
 
-(defun need-hairy-args ()
-  (when *only-simple-args*
-    ))
-
 
 ;;;; Format directive definition macros and runtime support.
 
@@ -662,9 +653,6 @@
 	      :offset ,offset))
      (pprint-pop)
      (pop args)))
-);#+formatter
-
-(eval-when (:compile-toplevel :execute :load-toplevel)
 
 ;;; NEXT-ARG -- internal.
 ;;;
@@ -684,7 +672,6 @@
      (pop args)))
 
 (defmacro def-complex-format-directive (char lambda-list &body body)
-  #+formatter
   (let* ((name (or (char-name char) (string char)))
 	 (defun-name (intern (concatenate 'string name "-FORMAT-DIRECTIVE-EXPANDER")))
 	 (directive (gensym))
@@ -705,11 +692,9 @@
                                 (butlast lambda-list))
                     ,@body))
                 `((declare (ignore ,directive ,directives))
-                  ,@body)))
-      )))
+                  ,@body))))))
 
 (defmacro def-format-directive (char lambda-list &body body)
-  #+formatter
   (let ((directives (gensym))
 	(declarations nil)
 	(body-without-decls body))
@@ -814,9 +799,6 @@
 		  :offset (caar ,params)))
 	 ,@body))))
 
-); eval-when
-
-#+formatter
 (defun %set-format-directive-expander (char fn)
   (setf (aref *format-directive-expanders* (char-code (char-upcase char))) fn)
   char)
@@ -1019,7 +1001,6 @@
 		   :start2 src :end2 (+ src commainterval)))
 	new-string))))
 
-#+formatter
 (defun expand-format-integer (base colonp atsignp params)
   (if (or colonp atsignp params)
       (expand-bind-defaults
@@ -1101,32 +1082,38 @@
 	       (format-print-ordinal stream (next-arg))
 	       (format-print-cardinal stream (next-arg)))))))
 
-(defconstant cardinal-ones
-  #(nil "one" "two" "three" "four" "five" "six" "seven" "eight" "nine"))
+(defconstant-eqx cardinal-ones
+    #(nil "one" "two" "three" "four" "five" "six" "seven" "eight" "nine")
+  equalp)
 
-(defconstant cardinal-tens
-  #(nil nil "twenty" "thirty" "forty"
-	"fifty" "sixty" "seventy" "eighty" "ninety"))
+(defconstant-eqx cardinal-tens
+    #(nil nil "twenty" "thirty" "forty"
+      "fifty" "sixty" "seventy" "eighty" "ninety")
+  equalp)
 
-(defconstant cardinal-teens
-  #("ten" "eleven" "twelve" "thirteen" "fourteen"  ;;; RAD
-    "fifteen" "sixteen" "seventeen" "eighteen" "nineteen"))
+(defconstant-eqx cardinal-teens
+    #("ten" "eleven" "twelve" "thirteen" "fourteen"  ;;; RAD
+      "fifteen" "sixteen" "seventeen" "eighteen" "nineteen")
+  equalp)
 
-(defconstant cardinal-periods
-  #("" " thousand" " million" " billion" " trillion" " quadrillion"
-    " quintillion" " sextillion" " septillion" " octillion" " nonillion"
-    " decillion" " undecillion" " duodecillion" " tredecillion"
-    " quattuordecillion" " quindecillion" " sexdecillion" " septendecillion"
-    " octodecillion" " novemdecillion" " vigintillion"))
+(defconstant-eqx cardinal-periods
+    #("" " thousand" " million" " billion" " trillion" " quadrillion"
+      " quintillion" " sextillion" " septillion" " octillion" " nonillion"
+      " decillion" " undecillion" " duodecillion" " tredecillion"
+      " quattuordecillion" " quindecillion" " sexdecillion" " septendecillion"
+      " octodecillion" " novemdecillion" " vigintillion")
+  equalp)
 
-(defconstant ordinal-ones
-  #(nil "first" "second" "third" "fourth"
-	"fifth" "sixth" "seventh" "eighth" "ninth")
+(defconstant-eqx ordinal-ones
+    #(nil "first" "second" "third" "fourth"
+      "fifth" "sixth" "seventh" "eighth" "ninth")
+  equalp
   "Table of ordinal ones-place digits in English")
 
-(defconstant ordinal-tens 
-  #(nil "tenth" "twentieth" "thirtieth" "fortieth"
-	"fiftieth" "sixtieth" "seventieth" "eightieth" "ninetieth")
+(defconstant-eqx ordinal-tens 
+    #(nil "tenth" "twentieth" "thirtieth" "fortieth"
+      "fiftieth" "sixtieth" "seventieth" "eightieth" "ninetieth")
+  equalp
   "Table of ordinal tens-place digits in English")
 
 (defun format-print-small-cardinal (stream n)
@@ -2086,7 +2073,6 @@
 		 `(case ,case ,@clauses)))))
      remaining)))
 
-#+formatter
 (defun expand-maybe-conditional (sublist)
   (fmt-log "expand-maybe-conditional")
   (flet ((hairy ()
@@ -2109,7 +2095,6 @@
 		 (hairy))))
 	(hairy))))
 
-#+formatter
 (defun expand-true-false-conditional (true false)
   (let ((arg (expand-next-arg)))
     (flet ((hairy ()
@@ -2530,7 +2515,6 @@
 	    (setf first-semi close-or-semi))))
       (values (segments) first-semi close remaining))))
 
-#+formatter
 (defun expand-format-justification (segments colonp atsignp first-semi params)
   (let ((newline-segment-p
 	 (and first-semi
@@ -2726,7 +2710,6 @@
 	    (return))))
       (results))))
 
-#+formatter
 (defun expand-format-logical-block (prefix per-line-p insides suffix atsignp)
   `(let ((arg ,(if atsignp 'args (expand-next-arg))))
      ,@(when atsignp
@@ -2829,9 +2812,6 @@
               package))))
 
 ;;; Contributed by stassats May 24, 2016
-;;; The compiler macro is broken in bclasp - it causes the control flow to go nuts
-;;;    I'm going to enable this compiler macro only in cclasp. May 12, 2017 meister
-#+cclasp
 (core:bclasp-define-compiler-macro format (&whole whole destination control-string &rest args)
   (if (stringp control-string)
       (let ((fun-sym (gensym "FUN"))

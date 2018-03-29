@@ -40,7 +40,6 @@ THE SOFTWARE.
 #include <clasp/core/binder.h>
 #include <clasp/core/bootStrapCoreSymbolMap.h>
 #include <clasp/core/builtInClass.fwd.h>
-#include <clasp/core/builtInClass.h>
 #include <clasp/core/bundle.h>
 #include <clasp/core/candoOpenMp.h>
 #include <clasp/core/character.fwd.h>
@@ -76,7 +75,6 @@ THE SOFTWARE.
 #include <clasp/core/external_wrappers.h>
 #include <clasp/core/fileSystem.fwd.h>
 #include <clasp/core/fileSystem.h>
-#include <clasp/core/forwardReferencedClass.h>
 #include <clasp/core/funcallableStandardClass.fwd.h>
 #include <clasp/core/funcallableStandardClass.h>
 #include <clasp/core/gcInterface.h>
@@ -180,16 +178,12 @@ THE SOFTWARE.
 #include <clasp/core/standardClass.fwd.h>
 #include <clasp/core/standardClass.h>
 #include <clasp/core/standardObject.fwd.h>
-#include <clasp/core/standardObject.h>
 #include <clasp/core/stdClass.fwd.h>
 #include <clasp/core/stdClass.h>
 #include <clasp/core/stringList.fwd.h>
 #include <clasp/core/stringList.h>
 #include <clasp/core/stringSet.fwd.h>
 #include <clasp/core/stringSet.h>
-#include <clasp/core/structureClass.fwd.h>
-#include <clasp/core/structureClass.h>
-#include <clasp/core/structureObject.h>
 #include <clasp/core/symbol.fwd.h>
 #include <clasp/core/symbol.h>
 #include <clasp/core/symbolList.fwd.h>

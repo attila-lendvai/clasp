@@ -11,9 +11,6 @@
 
 (in-package "CLOS")
 
-;;; ----------------------------------------------------------------------
-;;; Methods
-
 ;;; ======================================================================
 ;;; Built-in classes
 ;;; ----------------------------------------------------------------------
@@ -22,26 +19,12 @@
   (declare (ignore initargs))
   (error "The built-in class (~A) cannot be instantiated" class))
 
-;;;
-;;; At this point we can activate the vector of builtin classes, which
-;;; is used by class-of and other functions.
-;;;
-(si::*make-constant '+builtin-classes+ +builtin-classes-pre-array+)
-
 (defmethod ensure-class-using-class ((class null) name &rest rest)
   (clos::gf-log "In ensure-class-using-class (class null)%N")
   (clos::gf-log "     class -> %s%N" name)
   (multiple-value-bind (metaclass direct-superclasses options)
       (apply #'help-ensure-class rest)
-    ;;; In Clasp make-instance of a class requires that a new stamp is chosen
     (setf class (apply #'make-instance metaclass :name name options))
-    ;;
-    ;; initialize the default allocator for the new class
-    ;; It is inherited from the direct-superclasses - if they are all 
-    ;; regular classes then it will get an Instance allocator
-    ;; If one of them is a ClbindClass then this will inherit a
-    ;; duplicate of its allocator
-    (setf (creator class) (sys:compute-instance-creator class metaclass direct-superclasses))
     (invalidate-generic-functions-with-class-selector class)
     (when name
       (si:create-type-name name)
@@ -81,7 +64,11 @@
 ;;; STRUCTURES
 ;;;
 
-;;; structure-classes cannot be instantiated
+(defmethod allocate-instance ((class structure-class) &rest initargs)
+  (declare (ignore initargs))
+  (core:allocate-new-instance class (class-size class)))
+
+;;; structure-classes cannot be instantiated (but could be, as an extension)
 (defmethod make-instance ((class structure-class) &rest initargs)
   (declare (ignore initargs))
   (error "The structure-class (~A) cannot be instantiated" class))
@@ -94,38 +81,13 @@
     (unless (eq :INSTANCE (slot-definition-allocation slot))
       (error "The structure class ~S can't have shared slots" (class-name class)))))
 
-(defmethod print-object ((obj structure-object) stream)
-  (let* ((class (si:instance-class obj))
-	 (slotds (class-slots class)))
-    (when (and slotds
-               ;; *p-readably* effectively disables *p-level*
-	       (not *print-readably*)
-	       *print-level*
-	       (zerop *print-level*))
-      (write-string "#" stream)
-      (return-from print-object obj))
-    (write-string "#S(" stream)
-    (prin1 (class-name class) stream)
-    (do ((scan slotds (cdr scan))
-	 (i 0 (1+ i))
-	 (limit (or *print-length* most-positive-fixnum))
-	 (sv))
-	((null scan))
-      (declare (fixnum i))
-      (when (>= i limit)
-	(write-string " ..." stream)
-	(return))
-      (setq sv (si:instance-ref obj i))
-      #+ecl(write-string " :" stream)
-      #+ecl(prin1 (slot-definition-name (car scan)) stream)
-      ;; fix bug where symbols like :FOO::BAR are printed
-      #+clasp(write-string " " stream)
-      #+clasp(let ((kw (intern (symbol-name (slot-definition-name (car scan)))
-                               (load-time-value (find-package "KEYWORD")))))
-               (prin1 kw stream))
-      (write-string " " stream)
-      (prin1 sv stream))
-    (write-string ")" stream)
-    obj))
-
-
+(defun copy-structure (structure)
+  ;; This could be done slightly faster by making copy-structure generic,
+  ;; and having defstruct define a copy-structure method that works without a loop
+  ;; or checking the size.
+  (let* ((class (class-of structure))
+         (copy (allocate-instance class))
+         (size (class-size class)))
+    (loop for i below size
+          do (si:instance-set copy i (si:instance-ref structure i)))
+    copy))

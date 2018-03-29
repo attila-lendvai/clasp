@@ -51,7 +51,6 @@ THE SOFTWARE.
 #include <clasp/core/funcallableInstance.h>
 #include <clasp/core/backquote.h>
 #include <clasp/core/sequence.h>
-#include <clasp/core/structureObject.h>
 #include <clasp/core/wrappedPointer.h>
 #include <clasp/core/pathname.h>
 #include <clasp/core/unixfsys.h>
@@ -78,7 +77,6 @@ THE SOFTWARE.
 #include <clasp/core/hashTableEql.h>
 #include <clasp/core/multipleValues.h>
 #include <clasp/core/lispStream.h>
-#include <clasp/core/structureObject.h>
 #include <clasp/core/lispReader.h>
 #include <clasp/core/designators.h>
 #include <clasp/core/profile.h>
@@ -307,7 +305,7 @@ CL_LAMBDA(sym value);
 CL_DECLARE();
 CL_DOCSTRING("set");
 CL_DEFUN T_sp cl__set(Symbol_sp sym, T_sp val) {
-  if (sym->isConstant())
+  if (sym->getReadOnly())
     SIMPLE_ERROR(BF("Cannot modify value of constant %s") % _rep_(sym));
   sym->setf_symbolValue(val);
   return val;
@@ -839,21 +837,6 @@ CL_DEFUN T_mv core__separate_pair_list(List_sp listOfPairs) {
   return (Values(tfirsts, seconds.cons()));
 }
 
-#if DEPRECATED_C_FUNCTION
-CL_LAMBDA(sym);
-CL_DECLARE();
-CL_DOCSTRING("c_function");
-CL_DEFUN Pointer_mv core__c_function(Symbol_sp sym) {
-  return (Values(_lisp->lookup_c_function_ptr(sym)));
-};
-#endif
-
-// ignore env
-CL_DEFUN T_sp core__compiler_macro_function(core::T_sp name, core::T_sp env)
-{
-  return core__get_sysprop(name,cl::_sym_compiler_macro);
-}
-
 // ignore env
 CL_LAMBDA(name &optional env);
 CL_DEFUN T_mv core__get_bclasp_compiler_macro_function(core::T_sp name, core::T_sp env)
@@ -869,7 +852,7 @@ CL_DEFUN void core__setf_bclasp_compiler_macro_function(core::T_sp name, core::T
 
 // ignore env
 CL_LAMBDA(name &optional env);
-CL_DEFUN T_mv core__get_compiler_macro_function(core::T_sp name, core::T_sp env)
+CL_DEFUN T_mv cl__compiler_macro_function(core::T_sp name, core::T_sp env)
 {
   // First try to get it from the cl:compiler-macro system property and failing that
   // try getting it from the core:bclasp-compiler-macro
@@ -878,10 +861,12 @@ CL_DEFUN T_mv core__get_compiler_macro_function(core::T_sp name, core::T_sp env)
   return core__get_sysprop(name,core::_sym_bclasp_compiler_macro);
 }
 
-CL_LAMBDA(name function &optional env);
-CL_DEFUN void core__setf_compiler_macro_function(core::T_sp name, core::T_sp function, core::T_sp env)
+CL_LISPIFY_NAME("CL:compiler-macro-function");
+CL_LAMBDA(function name &optional env);
+CL_DEFUN_SETF T_sp setf_compiler_macro_function(core::T_sp function, core::T_sp name, core::T_sp env)
 {
   core__put_sysprop(name,cl::_sym_compiler_macro,function);
+  return function;
 }
 
 // ignore env
@@ -898,11 +883,23 @@ CL_DEFUN void core__setf_global_inline_status(core::T_sp name, bool status, core
 }
 
 
+// ignore env
+CL_LAMBDA(name &optional env);
+CL_DEFUN T_sp core__function_type(T_sp name, T_sp env) {
+  return core__get_sysprop(name, cl::_sym_ftype);
+}
+
+CL_LISPIFY_NAME("CORE:function-type");
+CL_LAMBDA(type name &optional env);
+CL_DEFUN_SETF T_sp core__setf_function_type(T_sp type, T_sp name, T_sp env) {
+  core__put_sysprop(name, cl::_sym_ftype, type);
+  return type;
+}
 
 
 CL_LAMBDA(symbol &optional env);
 CL_DECLARE();
-CL_DOCSTRING("See CLHS: macroFunction");
+CL_DOCSTRING("See CLHS: macro-function");
 CL_DEFUN T_sp cl__macro_function(Symbol_sp symbol, T_sp env) {
   T_sp func = _Nil<T_O>();
   if (env.nilp()) {
@@ -925,6 +922,20 @@ CL_DEFUN T_sp cl__macro_function(Symbol_sp symbol, T_sp env) {
     }
   }
   return func;
+}
+
+CL_LISPIFY_NAME("cl:macro-function");
+CL_LAMBDA(function symbol &optional env);
+CL_DECLARE();
+CL_DOCSTRING("(setf macro-function)");
+CL_DEFUN_SETF T_sp setf_macro_function(Function_sp function, Symbol_sp symbol, T_sp env) {
+  NamedFunction_sp namedFunction;
+  (void)env; // ignore
+  
+  if ((namedFunction = function.asOrNull<NamedFunction_O>()))
+    namedFunction->set_kind(kw::_sym_macro);
+  symbol->setf_symbolFunction(function);
+  return function;
 }
 
 CL_LAMBDA(symbol);
@@ -1048,6 +1059,31 @@ CL_DEFUN void core__gdb_inspect(String_sp msg, T_sp o) {
   core__invoke_internal_debugger(_Nil<core::T_O>());
 };
 
+CL_LISPIFY_NAME("CORE:specialp");
+CL_LAMBDA(specialp symbol);
+CL_DECLARE();
+CL_DOCSTRING("Set whether SYMBOL is globally known to be special. Use cautiously.");
+CL_DEFUN_SETF bool setf_symbol_specialp(bool specialp, Symbol_sp symbol) {
+  symbol->setf_specialP(specialp);
+  return specialp;
+}
+
+CL_LAMBDA(symbol);
+CL_DECLARE();
+CL_DOCSTRING("Returns whether SYMBOL is known to be a constant (i.e. from DEFCONSTANT).");
+CL_DEFUN bool core__symbol_constantp(Symbol_sp symbol) {
+  return symbol->getReadOnly();
+}
+
+CL_LISPIFY_NAME("core:symbol-constantp");
+CL_LAMBDA(value symbol);
+CL_DECLARE();
+CL_DOCSTRING("Set whether SYMBOL is known to be a constant. Use cautiously.");
+CL_DEFUN_SETF T_sp setf_symboL_constantp(T_sp value, Symbol_sp symbol) {
+  symbol->setReadOnly(value.notnilp());
+  return value;
+}
+
 // Must be synced with constant-form-value in source-transformations.lsp
 CL_LAMBDA(obj &optional env);
 CL_DECLARE();
@@ -1057,7 +1093,7 @@ CL_DEFUN bool cl__constantp(T_sp obj, T_sp env) {
   if (obj.nilp()) return true;
   if (cl__symbolp(obj)) {
     if (cl__keywordp(obj)) return true;
-    return gc::As<Symbol_sp>(obj)->isConstant();
+    return gc::As<Symbol_sp>(obj)->getReadOnly();
   }
   if ((obj).consp()) {
     if (oCar(obj) == cl::_sym_quote)
@@ -1093,22 +1129,20 @@ CL_DEFUN Class_sp cl__class_of(T_sp obj) {
 }
 
 SYMBOL_EXPORT_SC_(CorePkg,STARdebug_fsetSTAR);
-CL_LAMBDA(function-name fn &optional is-macro pretty-print (lambda-list nil lambda-list-p));
+CL_LAMBDA(function-name fn &optional is-macro (lambda-list nil lambda-list-p));
 CL_DECLARE();
 CL_DOCSTRING(R"doc(* Arguments
 - function-name :: The name of the function to bind.
 - fn :: The function object.
 - is-macro :: A boolean.
-- pretty-print : A boolean.
 - lambda-list : A lambda-list or nil.
 - lambda-list-p : T if lambda-list is passed
 * Description
 Bind a function to the function slot of a symbol
 - handles symbol function-name and (SETF XXXX) names.
 IS-MACRO defines if the function is a macro or not.
-PRETTY-PRINT was inherited from ecl - I don't know what its for.
 LAMBDA-LIST passes the lambda-list.)doc");
-CL_DEFUN T_sp core__fset(T_sp functionName, Function_sp functor, T_sp is_macro, T_sp pretty_print, T_sp lambda_list, T_sp lambda_list_p) {
+CL_DEFUN T_sp core__fset(T_sp functionName, Function_sp functor, T_sp is_macro, T_sp lambda_list, T_sp lambda_list_p) {
   if ( NamedFunction_sp functionObject = functor.asOrNull<NamedFunction_O>() ) {
     if (is_macro.isTrue()) {
       functionObject->set_kind(kw::_sym_macro);
@@ -1158,6 +1192,48 @@ CL_DEFUN T_sp cl__fdefinition(T_sp functionName) {
     return sym->symbolFunction();
   }
   TYPE_ERROR(functionName,cl::_sym_function);
+}
+
+CL_LISPIFY_NAME("cl:fdefinition")
+CL_LAMBDA(function name);
+CL_DECLARE();
+CL_DOCSTRING("(setf fdefinition)");
+CL_DEFUN_SETF T_sp setf_fdefinition(Function_sp function, T_sp name) {
+  Symbol_sp symbol;
+  NamedFunction_sp functionObject;
+  
+  if ((functionObject = function.asOrNull<NamedFunction_O>())) {
+    functionObject->set_kind(kw::_sym_function);
+  }
+  if ((symbol = name.asOrNull<Symbol_O>())) {
+    symbol->setf_symbolFunction(function);
+    return function;
+  } else if (name.consp()) {
+    List_sp cur = name;
+    if (oCar(cur) == cl::_sym_setf) {
+      symbol = gc::As<Symbol_sp>(oCadr(cur));
+      symbol->setSetfFdefinition(function);
+      return function;
+    }
+  }
+  TYPE_ERROR(name, // type of function names
+             Cons_O::createList(cl::_sym_or, cl::_sym_symbol,
+                                Cons_O::createList(cl::_sym_cons,
+                                                   Cons_O::createList(cl::_sym_eql, cl::_sym_setf))));
+}
+
+// reader in symbol.cc; this additionally involves function properties, so it's here
+CL_LISPIFY_NAME("cl:symbol-function")
+CL_LAMBDA(function symbol);
+CL_DECLARE();
+CL_DOCSTRING("(setf symbol-function)");
+CL_DEFUN_SETF T_sp setf_symbol_function(Function_sp function, Symbol_sp name) {
+  NamedFunction_sp functionObject;
+  if ((functionObject = function.asOrNull<NamedFunction_O>())) {
+    functionObject->set_kind(kw::_sym_function);
+  }
+  name->setf_symbolFunction(function);
+  return function;
 }
 
 CL_LAMBDA(function-name);
@@ -1723,6 +1799,18 @@ CL_DEFUN Symbol_mv core__type_to_symbol(T_sp x) {
 #pragma clang diagnostic pop
 }
 
+T_sp type_of_decide_class(T_sp cl) {
+  // Return the name of the class if it's a proper name, or else the class.
+  Class_sp mcl = gc::As<Class_sp>(cl);
+  T_sp type = mcl->_className();
+  Symbol_sp st = gc::As<Symbol_sp>(type);
+  // Only use the class-name as a type if it's the proper name of the class.
+  if (type.nilp() || cl != T_sp(eval::funcall(cl::_sym_findClass, st, _Nil<T_O>()))) {
+    type = cl;
+  }
+  return type;
+}
+
 T_sp type_of(T_sp x) {
   if (x.fixnump()) {
     ql::list res;
@@ -1744,29 +1832,13 @@ T_sp type_of(T_sp x) {
     return res.cons();
   }
 #ifdef CLOS
-  if (Instance_sp instance = x.asOrNull<Instance_O>()) {
-    T_sp cl = lisp_instance_class(instance);
-    T_sp t;
-    if (Class_sp mcl = cl.asOrNull<Class_O>()) {
-      t = mcl->_className();
-    } else if (Instance_sp icl = cl.asOrNull<Instance_O>()) {
-      (void)icl;
-      DEPRECATEDP("Classes of instances should always be of Class_O type, not Instance_O");
-      //	    t = icl->_CLASS_NAME();
-    } else {
-      SIMPLE_ERROR(BF("Illegal class %s for instance class of %s") % _rep_(cl) % _rep_(instance));
-    }
-    Symbol_sp st = gc::As<Symbol_sp>(t);
-    if (t.nilp() || cl != T_sp(eval::funcall(cl::_sym_findClass, st, _Nil<T_O>()))) {
-      t = cl;
-    }
-    return t;
-  } else if (Class_sp mc = x.asOrNull<Class_O>()) {
-    Class_sp mcc = lisp_static_class(mc);
-    return mcc->_className();
+  else if (Instance_sp instance = x.asOrNull<Instance_O>()) {
+    return type_of_decide_class(lisp_instance_class(instance));
+  } else if (FuncallableInstance_sp instance = x.asOrNull<FuncallableInstance_O>()) {
+    return type_of_decide_class(lisp_instance_class(instance));
   }
 #endif
-  if (Symbol_sp symx = x.asOrNull<Symbol_O>()) {
+  else if (Symbol_sp symx = x.asOrNull<Symbol_O>()) {
     if (x.nilp()) return cl::_sym_null;
     if (x == _lisp->_true())
       return cl::_sym_boolean;
@@ -1778,10 +1850,6 @@ T_sp type_of(T_sp x) {
     return ax->type_of();
   } else if (WrappedPointer_sp pp = x.asOrNull<WrappedPointer_O>()) {
     return pp->_instanceClass()->_className();
-#if 0
-  } else if (core__structurep(x)) {
-    return gc::As<StructureObject_sp>(x)->structureType();
-#endif
   } else if (Stream_sp stx = x.asOrNull<Stream_O>()) {
     if (gc::IsA<SynonymStream_sp>(stx))
       return cl::_sym_SynonymStream_O;
@@ -2506,10 +2574,8 @@ void print_add_two_numbers(int x, int y) {
   SYMBOL_SC_(CorePkg, separatePairList);
   SYMBOL_EXPORT_SC_(ClPkg, set);
   SYMBOL_EXPORT_SC_(ClPkg, gensym);
-  SYMBOL_EXPORT_SC_(ClPkg, type_of);
   SYMBOL_SC_(CorePkg, separatePairList);
   SYMBOL_EXPORT_SC_(ClPkg, gensym);
-  SYMBOL_EXPORT_SC_(ClPkg, type_of);
   SYMBOL_SC_(CorePkg, separatePairList);
   SYMBOL_SC_(CorePkg, testMemoryError);
   SYMBOL_SC_(CorePkg, functionBlockName);

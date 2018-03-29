@@ -220,39 +220,6 @@ namespace detail {
     derivable_class_registration *m_registration;
   };
 
-#if 0
-
-  template <class Class, class Pointer, class Signature, class Policies>
-    struct constructor_registration_base : public registration
-  {
-  constructor_registration_base(Policies const& policies, string const& name, string const& arguments, string const& declares, string const& docstring)
-    : policies(policies), m_name(name), m_arguments(arguments), m_declares(declares), m_docstring(docstring)
-    {}
-
-
-    core::Functoid* makeConstructorFunctoid() const
-    {
-      string tname = m_name;
-      if (m_name == "") { tname = "default-ctor"; };
-      core::Functoid* f = gctools::ClassAllocator<VariadicConstructorFunctoid<Policies,Pointer,Class,Signature>>::allocate_class(tname);
-      return f;
-    }
-
-    void register_() const
-    {
-      core::Functoid* f = this->makeConstructorFunctoid();
-      lisp_defun_lispify_name(core::lisp_currentPackageName(),m_name,f,m_arguments,m_declares,m_docstring,true,true,CountConstructorArguments<Signature>::value);
-    }
-
-
-    Policies policies;
-    string m_name;
-    string m_arguments;
-    string m_declares;
-    string m_docstring;
-  };
-#endif
-
 /*! This is the constructor registration for default constructors of non derivable classes,
          Specialized by making second template parameter reg::null_type
         */
@@ -264,64 +231,6 @@ template <class Class, class Policies>
     return gctools::GC<DerivableDefaultConstructorCreator_O<Class>>::allocate();
   }
 };
-
-
-#if 0
-  template <
-    class Class
-    , class Get, class GetPolicies
-    , class Set = reg::null_type, class SetPolicies = reg::null_type
-    >
-    struct property_registration : registration
-    {
- property_registration(
-  char const* name
-    , Get const& get
-    , GetPolicies const& get_policies
-    , Set const& set = Set()
-    , SetPolicies const& set_policies = SetPolicies()
-    , string const& arguments =""
-    , string const& declares =""
-    , string const& docstring ="" )
-   : name(name)
-    , get(get)
-    , get_policies(get_policies)
-    , set(set)
-    , set_policies(set_policies)
-    , m_arguments(arguments)
-    , m_declares(declares)
-    , m_docstring(docstring)
-  {}
-
-  void register_() const
-  {
-  const string n(name);
-  core::Functoid* getter = gctools::ClassAllocator<GetterMethoid<reg::null_type,Class,Get>>::allocate_class(n,get);
-//                int*** i = GetterMethoid<reg::null_type,Class,Get>(n,get);
-//                printf("%p\n", i);
-  core::Symbol_sp classSymbol = reg::lisp_classSymbol<Class>();
-  lisp_defineSingleDispatchMethod(name
-    , classSymbol
-    , getter
-    , 0
-    , m_arguments
-    , m_declares
-    , m_docstring
-    , true
-    , 1 );
-//                printf("%s:%d - allocated a getter@%p for %s\n", __FILE__, __LINE__, getter, name);
-                // register the getter here
-}
-  char const* name;
-  Get get;
-  GetPolicies get_policies;
-  Set set;
-  SetPolicies set_policies;
-  string m_arguments;
-  string m_declares;
-  string m_docstring;
-};
-#endif
 
 } // namespace detail
 

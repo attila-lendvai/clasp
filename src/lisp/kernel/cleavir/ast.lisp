@@ -382,17 +382,8 @@
   "Generates code for the form that places the result into a precalculated-vector and returns the precalculated-vector index.
 If this form has already been precalculated then just return the precalculated-value index"
   (cond
-    ((and (consp form) (eq (first form) 'QUOTE))
-     (let* ((constant (cadr form))
-            (constant-index (clasp-cleavir:%literal-index constant read-only-p)))
-       (check-type constant-index clasp-cleavir:literal)
-       constant-index))
-    ((symbolp form)
-     (let ((result (clasp-cleavir:%literal-index form read-only-p)))
-       (check-type result clasp-cleavir:literal)
-       result))
-    ((constantp form)
-     (let ((result (clasp-cleavir:%literal-index form read-only-p)))
+    ((constantp form env)
+     (let ((result (clasp-cleavir:%literal-index (ext:constant-form-value form env) read-only-p)))
        (check-type result clasp-cleavir:literal)
        result))
     (t

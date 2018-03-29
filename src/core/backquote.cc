@@ -96,7 +96,7 @@ T_mv macro_backquote(List_sp form, T_sp env) {
   them together into one list and then points the cdr of the last element of this new list
   to c.
 */
-CL_LAMBDA(&va-rest lists);
+CL_LAMBDA(core:&va-rest lists);
 CL_DECLARE();
 CL_DOCSTRING("append as in clhs");
 CL_DEFUN T_sp core__backquote_append(VaList_sp lists) {
@@ -438,7 +438,7 @@ CL_DEFUN T_sp core__backquote_remove_tokens(T_sp x) {
   SYMBOL_SC_(CorePkg, STARbq_simplifySTAR);
 
 void initialize_backquote() {
-  defmacro(CorePkg, "quasiquote", macro_core__quasiquote, ARGS_macro_core__quasiquote, DECL_macro_core__quasiquote, DOCS_macro_core__quasiquote, __FILE__, __LINE__, false);
+  defmacro(CorePkg, "quasiquote", macro_core__quasiquote, ARGS_macro_core__quasiquote, DECL_macro_core__quasiquote, DOCS_macro_core__quasiquote, __FILE__, __LINE__);
   defmacro(CorePkg, "backquote", &macro_backquote, ARGS_macro_backquote, DECL_macro_backquote, DOCS_macro_backquote, __FILE__, __LINE__);
 
   _sym_STARbq_simplifySTAR->setf_symbolValue(_lisp->_true());

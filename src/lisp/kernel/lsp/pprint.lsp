@@ -104,7 +104,6 @@
   ;; Block-start queue entries in effect at the queue head.
   (pending-blocks :initform nil :type list :accessor pretty-stream-pending-blocks)
   )
-  (:sealedp t)
 )
 
 (defun pretty-stream-p (stream)
@@ -1480,7 +1479,7 @@
 ;;;; Interface seen by regular (ugly) printer and initialization routines.
 
 (eval-when (:compile-toplevel :execute)
-(defconstant +magic-forms+
+(defconstant-equal +magic-forms+
   '((lambda pprint-lambda)
     ;; Special forms.
     (block pprint-block)

@@ -200,7 +200,7 @@ namespace gctools {
   va_start(passed_args,LCC_VA_START_ARG); \
   core::T_O* lcc_passed_valist = va_arg(passed_args,core::T_O*); \
   va_end(passed_args); \
-  ::core::Vaslist lcc_arglist_s(*(Vaslist*)gctools::untag_vaslist(lcc_passed_valist));\
+  ::core::Vaslist lcc_arglist_s(*(core::Vaslist*)gctools::untag_vaslist(lcc_passed_valist));\
   core::VaList_sp lcc_vargs(&lcc_arglist_s); 
 
 #define private_LCC_VA_LIST_TOTAL_NUMBER_OF_ARGUMENTS(_args) (size_t)(((uintptr_clasp_t *)(_args[0].reg_save_area))[LCC_NARGS_REGISTER])
@@ -394,7 +394,7 @@ inline bool dump_Vaslist_ptr(Vaslist* args_orig) {
 
 
 #define APPLY_TO_VA_LIST
-#include <clasp/core/generated/applyToFrame.h>
+#include <clasp/core/applyToFrame.h>
 #undef APPLY_TO_VA_LIST
     
                        
@@ -414,7 +414,7 @@ inline gctools::return_type funcall_consume_valist_(gc::Tagged func_tagged, VaLi
   size_t nargs = args->remaining_nargs();
   switch (nargs) {
 #define APPLY_TO_VA_LIST_CASE 1
-#include <clasp/core/generated/applyToFrame.h>
+#include <clasp/core/applyToFrame.h>
 #undef APPLY_TO_VA_LIST_CASE
   default:
       printf("%s:%d Handle functions with arity %lu for funcall or reduce the number of args in this call\n", __FILE__, __LINE__, nargs);

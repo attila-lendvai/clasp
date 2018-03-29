@@ -107,7 +107,7 @@
 (defun gen-typep-check (object type pro con)
   (when (symbolp type)
     ;; We can sometimes call a predicate instead.
-    (let ((f (core:get-sysprop type 'core::type-predicate)))
+    (let ((f (core::simple-type-predicate type)))
       (when f
         (return-from gen-typep-check
           (gen-branch-call f (list object) pro con))))
@@ -183,7 +183,7 @@
            (if (eq element-type '*)
                'core:mdarray
                (complex-mdarray-type element-type))))
-    (let ((pro (if (eq dimensions '*)
+    (let ((pro (if (or (eq dimensions '*) (null dimensions))
                    pro
                    (loop for dim in dimensions
                          for i from 0
@@ -202,7 +202,9 @@
                    (t
                     (maybe-gen-primitive-type-check
                      object simple-mdarray-type
-                     (gen-rank-check object rank pro con)))))
+                     (gen-rank-check object rank pro con)
+                     ;;;kpoeck
+                     con))))
             (t
              (cond ((eql rank 1)
                     (maybe-gen-primitive-type-check

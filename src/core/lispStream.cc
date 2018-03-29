@@ -2191,7 +2191,11 @@ CL_DEFUN T_sp cl__make_broadcast_stream(List_sp ap) {
   return x;
 }
 
-T_sp cl_broadcast_stream_streams(T_sp strm) {
+CL_LAMBDA(strm);
+CL_DECLARE();
+CL_DOCSTRING("broadcast-stream-streams");
+CL_DEFUN
+T_sp cl__broadcast_stream_streams(T_sp strm) {
   unlikely_if(!AnsiStreamTypeP(strm, clasp_smm_broadcast))
       ERROR_WRONG_TYPE_ONLY_ARG(cl::_sym_broadcast_stream_streams,
                                 strm, cl::_sym_BroadcastStream_O);
@@ -2357,13 +2361,19 @@ CL_DEFUN T_sp cl__make_echo_stream(T_sp strm1, T_sp strm2) {
   return strm;
 }
 
-T_sp cl_echo_stream_input_stream(T_sp strm) {
+CL_LAMBDA(strm);
+CL_DECLARE();
+CL_DOCSTRING("echo-stream-input-stream");
+CL_DEFUN T_sp cl__echo_stream_input_stream(T_sp strm) {
   unlikely_if(!AnsiStreamTypeP(strm, clasp_smm_echo))
       ERROR_WRONG_TYPE_ONLY_ARG(cl::_sym_echo_stream_input_stream, strm, cl::_sym_EchoStream_O);
   return EchoStreamInput(strm);
 }
 
-T_sp cl_echo_stream_output_stream(T_sp strm) {
+CL_LAMBDA(strm);
+CL_DECLARE();
+CL_DOCSTRING("echo-stream-output-stream");
+CL_DEFUN T_sp cl__echo_stream_output_stream(T_sp strm) {
   unlikely_if(!AnsiStreamTypeP(strm, clasp_smm_echo))
       ERROR_WRONG_TYPE_ONLY_ARG(cl::_sym_echo_stream_output_stream, strm, cl::_sym_EchoStream_O);
   return EchoStreamOutput(strm);
@@ -2494,7 +2504,10 @@ CL_DEFUN T_sp cl__make_concatenated_stream(List_sp ap) {
   return x;
 }
 
-T_sp cl_concatenated_stream_streams(T_sp strm) {
+CL_LAMBDA(strm);
+CL_DECLARE();
+CL_DOCSTRING("concatenated-stream-streams");
+CL_DEFUN T_sp cl__concatenated_stream_streams(T_sp strm) {
   unlikely_if(!AnsiStreamTypeP(strm, clasp_smm_concatenated))
       ERROR_WRONG_TYPE_ONLY_ARG(cl::_sym_concatenated_stream_streams, strm, cl::_sym_ConcatenatedStream_O);
   return cl__copy_list(ConcatenatedStreamList(strm));
@@ -6103,14 +6116,13 @@ CL_DEFUN T_mv cl__read_line(T_sp sin, T_sp eof_error_p, T_sp eof_value, T_sp rec
   bool eofErrorP = eof_error_p.isTrue();
   sin = coerce::inputStreamDesignator(sin);
   if (!AnsiStreamP(sin)) {
-    T_mv result = eval::funcall(gray::_sym_stream_read_line, sin);
-    T_sp val = result;
-    T_sp hit_eof = result.second();
-    if (result.nilp() && hit_eof.notnilp()) {
+    T_mv results = eval::funcall(gray::_sym_stream_read_line, sin);
+    if (results.second().isTrue()) {
       if (eofErrorP) {
         ERROR_END_OF_FILE(sin);
+      } else {
+        return eof_value;
       }
-      return Values(val,_lisp->_true());
     }
   }
   //    bool recursiveP = translate::from_object<bool>::convert(env->lookup(_sym_recursive_p));

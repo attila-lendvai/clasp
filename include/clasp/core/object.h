@@ -354,21 +354,6 @@ class Hash1Generator {
   COMMON_CLASS_PARTS(aNamespace, aPackage, aClass, aClassName); 
 #endif
 
-#if 0
-#define DECLARE_INIT_GLOBALS() \
-  public:                        \
-    static void lisp_initGlobals(core::Lisp_sp lisp);
-#endif
-
-#if 0
-#define __DEFAULT_INITIALIZATION() \
-public:                            \
-  inline void initialize() {       \
-    this->Base::initialize();      \
-  }
-#endif
-
-
 #define DEFAULT_CTOR(oClass) \
 public:                      \
   explicit oClass() : oClass::Base(){}; /* default ctor */
@@ -521,9 +506,6 @@ namespace core {
   /*! Get the signature (metaclass slot definitions) for the instance */
     virtual T_sp instanceSig() const;
 
-  /*! Return number of slots if instance of Instance_O or StructureObject_O class
-	  otherwise return nil */
-    virtual T_sp oinstancepSTAR() const { return _Nil<T_O>(); };
   /*! Return number of slots if instance of Instance_O otherwise return nil */
     virtual T_sp oinstancep() const { return _Nil<T_O>(); }; //
     bool instancep() const { return oinstancep().isTrue(); };

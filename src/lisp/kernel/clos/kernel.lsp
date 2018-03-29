@@ -43,11 +43,11 @@
 ;;; name to class.
 ;;; 
 ;;; This is only used during boot. The real one is in built-in.
-(eval-when (compile #+clasp-boot :load-toplevel)
-  (defun setf-find-class (new-value class &optional errorp env)
+(eval-when (:compile-toplevel #+clasp-boot :load-toplevel)
+  (defun (setf find-class) (new-value class &optional errorp env)
     (warn "Ignoring class definition for ~S" class)))
 
-(defun setf-find-class (new-value name &optional errorp env)
+(defun (setf find-class) (new-value name &optional errorp env)
   (declare (ignore errorp env))
   (let ((old-class (find-class name nil)))
     (cond
@@ -57,29 +57,12 @@
        (unless (eq new-value old-class)
 	 (error "The class associated to the CL specifier ~S cannot be changed."
 		name)))
-      ((classp new-value)
-       #+clasp(core:set-class new-value name)
-       #+ecl(setf (gethash name si:*class-name-hash-table*) new-value))
-      ((null new-value)
-       #+clasp(core:set-class nil name)
-       #+ecl(remhash name si:*class-name-hash-table*))
-      (t (error "~A is not a class." new-value))))
+      ((or (classp new-value) (null new-value)) (core:set-class new-value name))
+      (t (error 'simple-type-error :datum new-value :expected-type '(or class null)
+                                   :format-control "~A is not a valid class for (setf find-class)"
+                                   :format-arguments (list new-value)))))
   new-value)
 
-(defsetf find-class (&rest x) (v) `(setf-find-class ,v ,@x))
-
-
-;; In clasp classp is a builtin predicate
-#-clasp
-(defun classp (obj)
-  (and (si:instancep obj)
-       (let ((topmost (find-class 'CLASS nil)))
-	 ;; All instances can be classes until the class CLASS has
-	 ;; been installed. Otherwise, we check the parents.
-	 ;(print (list (class-id (class-of obj))topmost (and topmost (class-precedence-list topmost))))
-	 (or (null topmost)
-	     (si::subclassp (si::instance-class obj) topmost)))
-       t))
 
 ;;; ----------------------------------------------------------------------
 ;;; Methods
@@ -110,7 +93,7 @@
   (if (and (fboundp name) (si::instancep (fdefinition name)))
       (fdefinition name)
       ;; create a fake standard-generic-function object:
-      (with-early-make-instance +standard-generic-function-slots+
+      (with-early-make-funcallable-instance +standard-generic-function-slots+
 	(gfun (find-class 'standard-generic-function)
 	      :name name
 	      :spec-list nil
@@ -139,9 +122,6 @@
 (defun compute-discriminating-function (generic-function)
   (declare (ignore generic-function))
   'invalidated-dispatch-function)
-
-#+(or)(eval-when (:execute :compile-toplevel :load-toplevel)
-  (setq cmp::*jit-dump-module-before-optimizations* t))
 
 ;;; ----------------------------------------------------------------------
 ;;; COMPUTE-APPLICABLE-METHODS
@@ -218,8 +198,7 @@
 	     (loop for spec in (method-specializers method)
 		for class in classes
 		always (cond ((eql-specializer-flag spec)
-			      ;; EQL specializer invalidate computation
-			      ;; we return NIL
+			      ;; EQL specializer can invalidate computation
 			      (when (si::of-class-p (eql-specializer-object spec) class)
 				(return-from std-compute-applicable-methods-using-classes
 				  (values nil nil)))
@@ -357,6 +336,11 @@
 			      'function))))))
 	(setf (generic-function-a-p-o-function gf) function)))))
 
+;;; Will be upgraded to a method in fixup.
 (defun print-object (object stream)
-  (print-unreadable-object (object stream)))
-
+  (print-unreadable-object (object stream)
+    ;; We don't just use :type, because that outputs an extra space.
+    (let ((*package* (find-package "CL")))
+      (format stream "~S"
+              (class-name (si:instance-class object)))))
+  object)

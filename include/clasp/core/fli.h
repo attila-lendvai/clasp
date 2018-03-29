@@ -33,7 +33,7 @@ THE SOFTWARE.
 //        getting and freeing foreign memory and calling foreign
 //        functions.
 //
-//  Augiust 2016 by Frank Goenninger, Gönninger B&T UG, Germany
+//  Augiust 2016 by Frank Gönninger, Gönninger B&T UG, Germany
 //
 // ===========================================================================
 

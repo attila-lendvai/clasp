@@ -77,11 +77,6 @@ object's representation."
         (values (read stream eof-error-p eof-value)
                 (file-position stream)))))
 
-(defun si::string-to-object (string &optional (err-value nil err-value-p))
-  (if err-value-p
-      (si::safe-eval `(read-from-string ,string) nil err-value)
-      (si::safe-eval `(read-from-string ,string) nil)))
-
 (defun write-to-string (object &rest rest
                         &aux (stream (make-string-output-stream)))
   "Args: (object &key (escape *print-escape*) (radix *print-radix*)
@@ -180,18 +175,16 @@ printed.  If FORMAT-STRING is NIL, however, no prompt will appear."
   (let ((l (read stream t nil t)))
     (when *read-suppress*
       (return-from sharp-s-reader nil))
-    (unless (get-sysprop (car l) 'is-a-structure)
+    (unless (names-structure-p (car l))
             (error "~S is not a structure." (car l)))
     ;; Intern keywords in the keyword package.
     (do ((ll (cdr l) (cddr ll)))
         ((endp ll)
-         ;; Find an appropriate construtor.
-         (do ((cs (get-sysprop (car l) 'structure-constructors) (cdr cs)))
-             ((endp cs)
-              (error "The structure ~S has no structure constructor."
-                     (car l)))
-           (when (symbolp (car cs))
-                 (return (apply (car cs) (cdr l))))))
+         ;; Do the construction.
+         (let ((constructor (structure-constructor (car l))))
+           (if constructor
+               (apply constructor (cdr l))
+               (error "The structure ~S has no standard constructor." (car l)))))
       (rplaca ll (intern (string (car ll)) 'keyword)))))
 
 (set-dispatch-macro-character #\# #\s 'sharp-s-reader)
@@ -260,11 +253,6 @@ the one used internally by ECL compiled files."
        (progv (si:cons-car %progv-list)
 	   (si:cons-cdr %progv-list)
 	 ,@body))))
-
-#-formatter
-(defmacro formatter (control-string)
-  `#'(lambda (*standard-output* &rest args)
-       (si::formatter-aux *standard-output* ,control-string args)))
 
 (defmacro print-unreadable-object
 	  ((object stream &key type identity) &body body)

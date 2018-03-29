@@ -39,11 +39,9 @@ THE SOFTWARE.
 //#i n c l u d e "setfExpander.h"
 #include <clasp/core/environment.h>
 #include <clasp/core/designators.h>
-#include <clasp/core/builtInClass.h>
 #include <clasp/core/lambdaListHandler.h>
 #include <clasp/core/predicates.h>
 #include <clasp/core/debugger.h>
-#include <clasp/core/standardObject.h>
 #include <clasp/core/predicates.h>
 #include <clasp/core/lisp.h>
 #include <clasp/core/backquote.h>
@@ -488,8 +486,8 @@ CL_DEFUN T_sp core__extract_lambda_name(List_sp lambdaExpression, T_sp defaultVa
 }
 CL_LAMBDA(symbol &optional env);
 CL_DECLARE();
-CL_DOCSTRING("environment_lookup_symbol_macro_definition");
-CL_DEFUN T_sp core__lookup_symbol_macro(Symbol_sp sym, T_sp env) {
+CL_DOCSTRING("Returns the macro expansion function for a symbol if it exists, or else NIL.");
+CL_DEFUN T_sp core__symbol_macro(Symbol_sp sym, T_sp env) {
   if (sym.nilp())
     return _Nil<T_O>();
   if (env.notnilp()) {
@@ -756,7 +754,7 @@ T_mv interpreter_case(List_sp args, T_sp environment) {
 
 void setq_symbol_value(Symbol_sp symbol, T_sp value, T_sp environment) {
   if (symbol->specialP() || Environment_O::clasp_lexicalSpecialP(environment, symbol)) {
-    if (symbol->isConstant())
+    if (symbol->getReadOnly())
       SIMPLE_ERROR(BF("Cannot modify value of constant %s") % _rep_(symbol));
     symbol->setf_symbolValue(value);
     return;
@@ -883,22 +881,6 @@ void extract_declares_docstring_code_specials(List_sp inputBody, List_sp &declar
   code = body;
   declares = cl__nreverse(declares);
 }
-
-#if 0
-#define ARGS_af_extractDeclaresDocstringCode "(body &key (expect-docstring t))"
-#define DECL_af_extractDeclaresDocstringCode ""
-#define DOCS_af_extractDeclaresDocstringCode "extractDeclaresDocstringCode"
-T_mv af_extractDeclaresDocstringCode(List_sp body, T_sp expectDocStr)
-{
-  IMPLEMENT_MEF("Switch to process-declarations");
-  List_sp declares;
-  String_sp docstr;
-  List_sp code;
-  List_sp specials;
-  extract_declares_docstring_code_specials(body,declares,expectDocStr.isTrue(),docstr,code,specials);
-  return Values(declares,docstr,code,specials);
-};
-#endif
 
 void extract_declares_code(List_sp args, List_sp &declares, List_sp &code) {
   gc::Nilable<String_sp> dummy_docstring;
@@ -1783,7 +1765,7 @@ T_mv doMacrolet(List_sp args, T_sp env, bool toplevel) {
     // printf("   inner_declares = %s\n", _rep_(inner_declares).c_str());
     // printf("   inner_docstring = %s\n", _rep_(inner_docstring).c_str());
     // printf("   inner_code = %s\n", _rep_(inner_code).c_str());
-    List_sp outer_func_cons = eval::funcall(core::_sym_parse_macro, name, olambdaList, inner_body);
+    List_sp outer_func_cons = eval::funcall(ext::_sym_parse_macro, name, olambdaList, inner_body);
     //		printf("%s:%d sp_macrolet outer_func_cons = %s\n", __FILE__, __LINE__, _rep_(outer_func_cons).c_str());
     Function_sp outer_func;
     List_sp outer_ll = oCadr(outer_func_cons);
@@ -1864,41 +1846,6 @@ T_mv do_symbolMacrolet(List_sp args, T_sp env, bool topLevelForm) {
 T_mv sp_symbolMacrolet(List_sp args, T_sp env) {
   ASSERT(env.generalp());
   return do_symbolMacrolet(args, env, false);
-#if 0
-  List_sp macros = oCar(args);
-  SymbolMacroletEnvironment_sp newEnv(SymbolMacroletEnvironment_O::make(env));
-  List_sp body = oCdr(args);
-  List_sp cur = macros;
-  LOG(BF("macros part=%s") % macros->__repr__() );
-  gc::Nilable<String_sp> docString = _Nil<T_O>();
-  SYMBOL_SC_(CorePkg,whole);
-  SYMBOL_SC_(CorePkg,env);
-  List_sp outer_ll = Cons_O::createList(_sym_whole, _sym_env);
-  SYMBOL_EXPORT_SC_(ClPkg,ignore);
-  List_sp declares = Cons_O::createList(cl::_sym_declare,Cons_O::createList(cl::_sym_ignore,_sym_whole,_sym_env));
-  while ( cur.notnilp() )
-  {
-    List_sp oneDef = oCar(cur);
-    Symbol_sp name = oCar(oneDef).as<Symbol_O>();
-    List_sp expansion = Cons_O::create(Cons_O::createList(cl::_sym_quote,oCadr(oneDef)),_Nil<T_O>());
-    LambdaListHandler_sp outer_llh = LambdaListHandler_O::create(outer_ll,
-                                                                 oCadr(declares),
-                                                                 cl::_sym_function);
-    printf("%s:%d Creating InterpretedClosure with no source information and empty name- fix this\n", __FILE__, __LINE__ );
-    InterpretedClosure* ic = gctools::ClassAllocator<InterpretedClosure>::allocate_class( _sym_symbolMacroletLambda
-                                                                                          , _Nil<SourcePosInfo_O>()
-                                                                                          , kw::_sym_macro
-                                                                                          , outer_llh
-                                                                                          , declares
-                                                                                          , _Nil<T_O>()
-                                                                                          , newEnv
-                                                                                          , expansion );
-    Function_sp outer_func = Function_O::make(ic);
-    newEnv->addSymbolMacro(name,outer_func);
-    cur = oCdr(cur);
-  }
-  return eval::sp_locally(body,newEnv);
-#endif
 }
 
 /*! Returns NIL if no function is found */
@@ -1940,7 +1887,7 @@ T_mv evaluate_atom(T_sp exp, T_sp environment) {
     _BLOCK_TRACEF(BF("Evaluating symbol: %s") % exp->__repr__());
     if (sym->isKeywordSymbol())
       return Values(sym);
-    if (core__lookup_symbol_macro(sym, environment).notnilp()) {
+    if (core__symbol_macro(sym, environment).notnilp()) {
       T_sp texpr;
       {
         texpr = cl__macroexpand(sym, environment);
@@ -2341,7 +2288,7 @@ gctools::return_type funcall_frame(Function_sp func, gctools::Frame* frame)
 {
   switch ((*frame).number_of_arguments()) {
 #define APPLY_TO_FRAME
-#include <clasp/core/generated/applyToFrame.h>
+#include <clasp/core/applyToFrame.h>
 #undef APPLY_TO_FRAME
   default:
       SIMPLE_ERROR(BF("Function call with %lu arguments exceeded the call-arguments-limit %lu") % (*frame).number_of_arguments() % CALL_ARGUMENTS_LIMIT);

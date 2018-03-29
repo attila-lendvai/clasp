@@ -21,6 +21,11 @@
                          :l ,(core:source-pos-info-lineno object)
                          :c ,(core:source-pos-info-column object)))
 
+(defvar *form* nil)
+(defvar *ast* nil)
+(defvar *hir* nil)
+(defvar *mir* nil)
+
 ;;; Save top level forms for source tracking
 (defmethod cleavir-generate-ast::convert-form :around (form info env system)
   (let ((core:*top-level-form-stack* (cons form core:*top-level-form-stack*)))
@@ -86,50 +91,18 @@
 	 (make-instance 'cleavir-env:constant-variable-info
 	   :name symbol
 	   :value (symbol-value symbol)))
-	(;; If it is not a constant variable, we can check whether
-	 ;; macroexpanding it alters it.
-	 (not (eq symbol (macroexpand-1 symbol)))
-	 ;; Clearly, the symbol is defined as a symbol macro.
-	 (make-instance 'cleavir-env:symbol-macro-info
-	   :name symbol
-	   :expansion (macroexpand-1 symbol)))
-        (;; If it is not bound, it could still be special.
-         ;; Use Clasp's core:specialp test to determine if it is special.
-         ;; If so, assume that it is of type T
+        (;; Use Clasp's core:specialp test to determine if it is special.
+         ;; Note that in Clasp constants are also special (FIXME?) so we
+         ;; have to do this test after checking for constantness.
          (core:specialp symbol)
-	 ;; It is a special variable.  However, we don't know its
-	 ;; type, so we assume it is T, which is the default.
 	 (make-instance 'cleavir-env:special-variable-info
             :name symbol
             :global-p t))
-        #+(or)( ;; If it is not bound, it could still be special.  If so, it
-               ;; might have a restricted type on it.  It will then likely
-               ;; fail to bind it to an object of some type that we
-               ;; introduced, say our bogus environment.  It is not fool
-               ;; proof because it could have the type STANDARD-OBJECT.  But
-               ;; in the worst case, we will just fail to recognize it as a
-               ;; special variable.
-               (null (ignore-errors
-                       (eval `(let ((,symbol (make-instance 'clasp-global-environment)))
-                                t))))
-               ;; It is a special variable.  However, we don't know its
-               ;; type, so we assume it is T, which is the default.
-               (make-instance 'cleavir-env:special-variable-info
-                              :name symbol))
-	#+(or)( ;; If the previous test fails, it could still be special
-               ;; without any type restriction on it.  We can try to
-               ;; determine whether this is the case by checking whether the
-               ;; ordinary binding (using LET) of it is the same as the
-               ;; dynamic binding of it.  This method might fail because the
-               ;; type of the variable may be restricted to something we
-               ;; don't know and that we didn't catch before, 
-               (ignore-errors
-                 (eval `(let ((,symbol 'a))
-                          (progv '(,symbol) '(b) (eq ,symbol (symbol-value ',symbol))))))
-               ;; It is a special variable.  However, we don't know its
-               ;; type, so we assume it is T, which is the default.
-               (make-instance 'cleavir-env:special-variable-info
-                              :name symbol))
+	(;; Maybe it's a symbol macro.
+	 (core:symbol-macro symbol)
+	 (make-instance 'cleavir-env:symbol-macro-info
+	   :name symbol
+	   :expansion (macroexpand-1 symbol)))
 	(;; Otherwise, this symbol does not have any variable
 	 ;; information associated with it.
 	 t
@@ -157,32 +130,17 @@
 
 (defmethod cleavir-env:function-info ((environment clasp-global-environment) function-name)
   (cond
-    ( ;; If it is not the name of a macro, it might be the name of
-     ;; a special operator.  This can be checked by calling
-     ;; special-operator-p.
-     (and (symbolp function-name) (treat-as-special-operator-p function-name))
+    ((and (symbolp function-name) (treat-as-special-operator-p function-name))
      (make-instance 'cleavir-env:special-operator-info
 		    :name function-name))
-    ( ;; If the function name is the name of a macro, then
-     ;; MACRO-FUNCTION returns something other than NIL.
-     (and (symbolp function-name) (not (null (macro-function function-name))))
-     ;; If so, we know it is a global macro.  It is also safe to
-     ;; call COMPILER-MACRO-FUNCTION, because it returns NIL if
-     ;; there is no compiler macro associated with this function
-     ;; name.
-     (make-instance 'cleavir-env:global-macro-info
+    ;; If the function name is the name of a macro, then
+    ;; MACRO-FUNCTION returns something other than NIL.
+    ((and (symbolp function-name) (not (null (macro-function function-name))))
+     (make-instance 'cleavir-env:global-macro-info ; we're global, so the macro must be global.
 		    :name function-name
 		    :expander (macro-function function-name)
 		    :compiler-macro (compiler-macro-function function-name)))
-    ( ;; If it is neither the name of a macro nor the name of a
-     ;; special operator, it might be the name of a global
-     ;; function.  We can check this by calling FBOUNDP.  Now,
-     ;; FBOUNDP returns true if it is the name of a macro or a
-     ;; special operator as well, but we have already checked for
-     ;; those cases.
-     (fboundp function-name)
-     ;; In that case, we return the relevant info
-     ;; Check if we should inline the function
+    ((fboundp function-name)
      (let* ((cleavir-ast (core:cleavir-ast (fdefinition function-name)))
             (inline-status (core:global-inline-status function-name)))
        (make-instance 'cleavir-env:global-function-info
@@ -190,6 +148,16 @@
                       :compiler-macro (compiler-macro-function function-name)
                       :inline inline-status
                       :ast cleavir-ast)))
+    ;; A top-level defun for the function has been seen.
+    ;; The expansion calls cmp::register-global-function-def at compile time,
+    ;; which is hooked up so that among other things this works.
+    ((cmp:known-function-p function-name)
+     ;; Note that since the function doesn't actually exist, it has no AST.
+     ;; FIXME: Store ASTs in the environment.
+     (make-instance 'cleavir-env:global-function-info
+                    :name function-name
+                    :compiler-macro (compiler-macro-function function-name)
+                    :inline (core:global-inline-status function-name)))
     ( ;; If it is neither of the cases above, then this name does
      ;; not have any function-info associated with it.
      t
@@ -285,7 +253,7 @@
       (class (return-from type-expand-1 (values type-specifier nil)))
       (symbol (setf head type-specifier tail nil))
       (cons (setf head (first type-specifier) tail (rest type-specifier))))
-    (let ((def (get-sysprop head 'core::deftype-definition)))
+    (let ((def (core::type-expander head)))
       (if def
           (values (apply def tail) t)
           (values type-specifier nil)))))
@@ -416,22 +384,6 @@
 (defun do-continue-hir ()
   (format t "Continuing processing forms~%")
   (signal 'continue-hir))
-
-
-(defconstant *hir-commands*
-  '(("HIR commands"
-     ((:c :continue) do-continue-hir nil
-      ":c(ontinue) Continue processing forms"
-      "Stuff"))))
-
-
-
-
-(defvar *form* nil)
-(defvar *ast* nil)
-(defvar *hir* nil)
-(defvar *mir* nil)
-
 
 (defmacro with-ir-function ((lisp-function-name
 			     &key (function-type cmp:%fn-prototype% function-type-p)

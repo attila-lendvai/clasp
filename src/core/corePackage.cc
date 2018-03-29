@@ -90,9 +90,7 @@ THE SOFTWARE.
 #include <clasp/core/smallMap.h>
 #include <clasp/core/smallMultimap.h>
 #include <clasp/core/sourceFileInfo.h>
-#include <clasp/core/standardObject.h>
 #include <clasp/core/lispStream.h>
-#include <clasp/core/structureObject.h>
 #include <clasp/core/symbolToEnumConverter.h>
 #include <clasp/core/symbol.h>
 #include <clasp/core/lispList.h>
@@ -119,7 +117,6 @@ THE SOFTWARE.
 #include <clasp/core/sexpSaveArchive.h>
 #include <clasp/core/metaClass.h>
 #include <clasp/core/bignum.h>
-#include <clasp/core/builtInClass.h>
 #include <clasp/clbind/class_rep.h>
 
 //
@@ -613,7 +610,6 @@ SYMBOL_SC_(CorePkg, STARenvironmentPrintingTabIncrementSTAR);
 SYMBOL_EXPORT_SC_(CorePkg, STARenvironment_debugSTAR);
 SYMBOL_SC_(CorePkg, _PLUS_activationFrameNil_PLUS_);
 SYMBOL_EXPORT_SC_(ClPkg, cond);
-SYMBOL_SC_(CorePkg, parse_macro);
 SYMBOL_SC_(CorePkg, globalFunction);
 SYMBOL_SC_(CorePkg, globalSetfFunction);
 SYMBOL_SC_(CorePkg, lexicalFunction);
@@ -803,6 +799,10 @@ SYMBOL_SC_(CorePkg, all_keys);
 
 SYMBOL_EXPORT_SC_(KeywordPkg, changed);
 SYMBOL_EXPORT_SC_(CorePkg,STARstack_top_hintSTAR);
+
+SYMBOL_EXPORT_SC_(ClPkg, structure_object);
+SYMBOL_EXPORT_SC_(ClPkg, standard_object);
+SYMBOL_EXPORT_SC_(ClPkg, copy_structure);
 
 void testConses() {
   printf("%s:%d Testing Conses and iterators\n", __FILE__, __LINE__);
