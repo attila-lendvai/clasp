@@ -166,13 +166,6 @@ VALID_OPTIONS = [
     "DEST_OS"
 ]
 
-def build_extension(bld):
-    log.pprint('BLUE', "build_extension()")
-    bld.recurse("extensions")
-
-def grovel(bld):
-    bld.recurse("extensions")
-
 def update_dependencies(cfg):
     # Specifying only label = "some-tag" will check out that tag into a "detached head", but
     # specifying both label = "master" and revision = "some-tag" will stay on master and reset to that revision.
@@ -629,18 +622,7 @@ def configure(cfg):
     else:
         pass
     cfg.check_cxx(stlib=BOOST_LIBRARIES, cflags='-Wall', uselib_store='BOOST')
-    cfg.extensions_include_dirs = []
-    cfg.extensions_gcinterface_include_files = []
-    cfg.extensions_stlib = []
-    cfg.extensions_lib = []
-    cfg.extensions_names = []
-    cfg.recurse('extensions')
-    log.debug("cfg.extensions_names before sort = %s", cfg.extensions_names)
-    cfg.extensions_names = sorted(cfg.extensions_names)
-    log.debug("cfg.extensions_names after sort = %s", cfg.extensions_names)
     clasp_gc_filename = "clasp_gc.cc"
-    if (len(cfg.extensions_names) > 0):
-        clasp_gc_filename = "clasp_gc_%s.cc" % ("_".join(cfg.extensions_names))
     log.debug("clasp_gc_filename = %s", clasp_gc_filename)
     cfg.define("CLASP_GC_FILENAME",clasp_gc_filename)
     llvm_liblto_dir = run_llvm_config(cfg, "--libdir")
@@ -826,8 +808,6 @@ def configure(cfg):
     cfg.env.append_value('LINKFLAGS', ['-fvisibility=default'])
     cfg.env.append_value('LINKFLAGS', ['-rdynamic'])
     sep = " "
-    cfg.env.append_value('STLIB', cfg.extensions_stlib)
-    cfg.env.append_value('LIB', cfg.extensions_lib)
     cfg.env.append_value('STLIB', cfg.env.STLIB_CLANG)
     cfg.env.append_value('STLIB', cfg.env.STLIB_LLVM)
     cfg.env.append_value('STLIB', cfg.env.STLIB_BOOST)
@@ -937,12 +917,6 @@ def build(bld):
     make_pump_tasks(bld, 'src/core/header-templates/', 'clasp/core/')
     make_pump_tasks(bld, 'src/clbind/header-templates/', 'clasp/clbind/')
 
-    # TODO delme?
-    task = generate_extension_headers_h(env=bld.env)
-    task.set_inputs([])
-    task.set_outputs([bld.path.find_or_declare("generated/extension_headers.h")])
-    bld.add_to_group(task)
-
     bld.set_group('compiling/c++')
 
     # Always build the C++ code
@@ -1008,96 +982,6 @@ class run_dsymutil(clasp_task):
     def run(self):
         cmd = 'dsymutil %s' % self.inputs[0]
         return self.exec_command(cmd)
-
-class link_fasl(clasp_task):
-    def run(self):
-        if (self.env.CLASP_BUILD_MODE=='fasl'):
-            log.debug("link_fasl self.inputs[3] = %s   self.outputs[0] = %s", self.inputs[3], self.outputs[0])
-            cmd = [ "cp", self.inputs[3].abspath(),self.outputs[0].abspath()]
-            return self.exec_command(cmd)
-        if (self.env.LTO_FLAG):
-            lto_option = self.env.LTO_FLAG
-            if (self.env.USE_PARALLEL_BUILD and self.bld.stage_val < 3):
-                lto_optimize_flag = "-O0"
-                log.debug("With USE_PARALLEL_BUILD and stage_val = %d dropping down to -O0 for link_fasl", self.bld.stage_val)
-            else:
-                lto_optimize_flag = "-O2"
-        else:
-            lto_option = ""
-            lto_optimize_flag = ""
-        link_options = self.bld.env['LINKFLAGS']
-        if (self.env['DEST_OS'] == DARWIN_OS):
-            link_options = link_options + [ "-flat_namespace", "-undefined", "suppress", "-bundle" ]
-        else:
-            link_options = link_options + [ "-shared" ]
-        cmd = [self.env.CXX[0]] + \
-                  waf_nodes_to_paths(self.inputs) + \
-                  [ lto_option, lto_optimize_flag ] + \
-                  link_options + \
-                  [ "-o", self.outputs[0].abspath() ]
-        return self.exec_command(cmd)
-
-class link_executable(clasp_task):
-    def run(self):
-        if (self.env.LTO_FLAG):
-            lto_option_list = [self.env.LTO_FLAG,"-O2"]
-            if (self.env['DEST_OS'] == DARWIN_OS ):
-                lto_object_path_lto = ["-Wl,-object_path_lto,%s" % self.outputs[1].abspath()]
-            else:
-                lto_object_path_lto = []
-        else:
-            lto_option_list = []
-            lto_object_path_lto = []
-        link_options = []
-        if (self.env['DEST_OS'] == DARWIN_OS ):
-            link_options = link_options + [ "-flto=thin", "-v", '-Wl,-stack_size,0x1000000']
-        cmd = [ self.env.CXX[0] ] + \
-              waf_nodes_to_paths(self.inputs) + \
-              self.env['LINKFLAGS'] + \
-              self.env['LDFLAGS']  + \
-              prefix_list_elements_with(self.env['LIBPATH'], '-L') + \
-              prefix_list_elements_with(self.env['STLIBPATH'], '-L') + \
-              libraries_as_link_flags(self.env.STLIB_ST,self.env.STLIB) + \
-              libraries_as_link_flags(self.env.LIB_ST,self.env.LIB) + \
-              lto_option_list + \
-              link_options + \
-              lto_object_path_lto + \
-              [ "-o", self.outputs[0].abspath()]
-        return self.exec_command(cmd)
-
-class compile_module(clasp_task):
-    def run(self):
-        executable = self.inputs[0].abspath()
-        image_file = self.inputs[1].abspath()
-        source_file = self.inputs[2].abspath()
-        fasl_file = self.outputs[0].abspath()
-        log.debug("In compile_module %s --image %s, %s -> %s", executable, image_file, source_file, fasl_file)
-        cmd = self.clasp_command_line(executable,
-                                      image = image_file,
-                                      features = ['ignore-extensions'],
-                                      forms = ['(compile-file #P"%s" :output-file #P"%s" :output-type :fasl)' % (source_file, fasl_file),
-                                               '(core:quit)'])
-        return self.exec_command(cmd)
-
-class generate_extension_headers_h(clasp_task):
-    def run(self):
-        log.debug("generate_extension_headers_h running, inputs: %s", self.inputs)
-        output_file = self.outputs[0].abspath()
-        new_contents = "// Generated by the wscript generate_extension_headers_h task - Editing it is unwise!\n"
-        old_contents = ""
-        for x in self.inputs[1:]:
-            new_contents += ("#include \"%s\"\n" % x.abspath())
-        if os.path.isfile(output_file):
-            fin = open(output_file, "r")
-            old_contents = fin.read()
-            fin.close()
-        if old_contents != new_contents:
-            log.debug("Writing to %s", output_file)
-            fout = open(output_file, "w")
-            fout.write(new_contents)
-            fout.close()
-        else:
-            log.debug("NOT writing to %s - it is unchanged", output_file)
 
 class link_bitcode(clasp_task):
     ext_out = ['.a']    # this affects the task execution order
