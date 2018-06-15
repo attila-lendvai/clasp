@@ -15,25 +15,26 @@
 
 (in-package #:cmp)
 
-;; If a form refers to a function we can use as the head of a form, return something suitable
-;; as head of form. Else NIL.
+;; If FORM refers to a function that we can use as the head of a function call form,
+;; then return something that is suitable as such. Otherwise NIL.
 (defun constant-function-expression (form env)
   (declare (ignore env))
-  (if (consp form)
-      (cond ((eq (car form) 'function)
-             (if (and (consp (cdr form)) (null (cddr form)))
-                 (second form)
-                 ;; invalid function form; could warn, but compiler should get it
-                 nil))
-            ;; FIXME: commented out because there could be a local binding; need to be smarter w/environment
-            #+(or)
-            ((eq (car form) 'quote)
-             (if (and (consp (cdr form)) (null (cddr form)))
-                 (second form)
-                 nil))
-            ((eq (car form) 'lambda) form)
-            (t nil))
-      nil))
+  ;; We assume here that FORM is a proper list, and let the compiler deal with otherwise invalid forms.
+  (when (consp form)
+    (let ((form-length-is-2 (and (consp (cdr form)) (null (cddr form)))))
+      (case (first form)
+        (function
+         (when form-length-is-2
+           (second form)))
+        (quote
+         (when form-length-is-2
+           (let* ((name (second form)))
+             ;; (... :test 'foo) refers to the global definition, while the (foo ...) form would refer to a
+             ;; possible local binding, so let's see if we have any in the env.
+             (unless (typep (cleavir-env:function-info env name) 'cleavir-env:local-function-info)
+               name))))
+        (lambda
+         form)))))
 
 ;; Return a function of two forms that returns a condition form for testing them, as well as required bindings.
 ;; That is, testing by a two-arg test (CLHS 17.2.1)
