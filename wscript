@@ -999,7 +999,6 @@ def build(bld):
     cclasp_common_lisp_output_name_list = variant.common_lisp_output_name_list(bld,bld.clasp_cclasp,stage='c')
     cxx_all_bitcode_node = bld.path.find_or_declare(variant.cxx_all_bitcode_name())
     out_dir_node = bld.path.find_dir(out)
-    bclasp_symlink_node = out_dir_node.make_node("bclasp")
     bld_task = bld.program(source = clasp_c_source_files,
                            includes = include_dirs,
                            target = [bld.iclasp_executable],
@@ -1069,30 +1068,12 @@ def build(bld):
         install('lib/clasp/', bclasp_common_lisp_output_name_list)
 
         if (False):   # build bclasp executable
-            task = link_executable(env = bld.env)
-            task.set_inputs(bclasp_common_lisp_output_name_list +
-                            [cxx_all_bitcode_node])
-            log.info("About to try and recurse into extensions again")
-            bld.recurse('extensions')
-            if ( bld.env['DEST_OS'] == DARWIN_OS ):
-                if (bld.env.LTO_FLAG):
-                    bclasp_lto_o = bld.path.find_or_declare('%s_exec.lto.o' % variant.executable_name(stage = 'b'))
-                    task.set_outputs([bld.bclasp_executable,
-                                      bclasp_lto_o])
-                else:
-                    bclasp_lto_o = None
-                    task.set_outputs([bld.bclasp_executable])
-            else:
-                bclasp_lto_o = None
-                task.set_outputs(bld.bclasp_executable)
-            log.debug("link_executable for bclasp %s -> %s", task.inputs, task.outputs)
-            bld.add_to_group(task)
-
-            make_run_dsymutil_task(bld, 'b', bclasp_lto_o)
-
+            make_link_executable_task(bld,
+                                      bld.bclasp_executable,
+                                      bclasp_common_lisp_output_name_list,
+                                      cxx_all_bitcode_node)
             install('bin/%s' % bld.bclasp_executable.name, bld.bclasp_executable, chmod = Utils.O755)
             bld.symlink_as('${PREFIX}/bin/clasp', bld.bclasp_executable.name)
-            os.symlink(bld.bclasp_executable.abspath(), bclasp_symlink_node.abspath())
         # # Build ASDF for bclasp
         # cmp_asdf = compile_module(env = bld.env)
         # cmp_asdf.set_inputs([bld.iclasp_executable, bld.bclasp_fasl] + waf_nodes_for_lisp_files(bld, ["src/lisp/modules/asdf/build/asdf"]))
@@ -1158,27 +1139,10 @@ def build(bld):
             os.unlink(clasp_symlink_node.abspath())
     if (bld.stage == 'rebuild' or bld.stage_val >= 4):
         if (True):   # build cclasp executable
-            task = link_executable(env = bld.env)
-            task.set_inputs(cclasp_common_lisp_output_name_list +
-                            [cxx_all_bitcode_node])
-            log.info("About to try and recurse into extensions again")
-            bld.recurse('extensions')
-            if ( bld.env['DEST_OS'] == DARWIN_OS ):
-                if (bld.env.LTO_FLAG):
-                    cclasp_lto_o = bld.path.find_or_declare('%s_exec.lto.o' % variant.executable_name(stage = 'c'))
-                    task.set_outputs([bld.cclasp_executable,
-                                      cclasp_lto_o])
-                else:
-                    cclasp_lto_o = None
-                    task.set_outputs([bld.cclasp_executable])
-            else:
-                cclasp_lto_o = None
-                task.set_outputs(bld.cclasp_executable)
-            log.debug("link_executable for cclasp %s -> %s", task.inputs, task.outputs)
-            bld.add_to_group(task)
-
-            make_run_dsymutil_task(bld, 'c', cclasp_lto_o)
-
+            make_link_executable_task(bld,
+                                      bld.cclasp_executable,
+                                      cclasp_common_lisp_output_name_list,
+                                      cxx_all_bitcode_node)
             install('bin/%s' % bld.cclasp_executable.name, bld.cclasp_executable, chmod = Utils.O755)
             bld.symlink_as('${PREFIX}/bin/clasp', bld.cclasp_executable.name)
             os.symlink(bld.cclasp_executable.abspath(), clasp_symlink_node.abspath())
@@ -1303,6 +1267,24 @@ class link_executable(clasp_task):
               lto_object_path_lto + \
               [ "-o", self.outputs[0].abspath()]
         return self.exec_command(cmd)
+
+def make_link_executable_task(bld, executable_node, lisp_file_list, bitcode_node):
+    variant = bld.variant_obj
+    task = link_executable(env = bld.env)
+    task.set_inputs(lisp_file_list + [bitcode_node])
+    # TODO why recurse here? comment or delete
+    log.info("About to try and recurse into extensions again")
+    bld.recurse('extensions')
+    if (bld.env.LTO_FLAG and bld.env['DEST_OS'] == DARWIN_OS):
+        clasp_lto_o = bld.path.find_or_declare('%s_exec.lto.o' % variant.executable_name(stage = bld.stage))
+        task.set_outputs([executable_node,
+                          clasp_lto_o])
+    else:
+        clasp_lto_o = None
+        task.set_outputs(executable_node)
+    log.debug("link_executable for %s -> %s", task.inputs, task.outputs)
+    bld.add_to_group(task)
+    make_run_dsymutil_task(bld, bld.stage, clasp_lto_o)
 
 class run_aclasp(clasp_task):
     def run(self):
